@@ -1,0 +1,51 @@
+1. El Punto de Entrada (¿Por dónde se hace el login?)
+El usuario nunca debe entrar por la IP/puerto de Django (8000) ni de Keycloak (8080). El punto de entrada oficial es el oauth2-proxy (puerto 4180).
+
+El Intento: El usuario entra a http://localhost:4180.
+
+El Bloqueo: El proxy revisa si el navegador tiene una cookie llamada _oauth2_proxy. Como no existe, el proxy interrumpe la petición.
+
+El Salto: El proxy redirige al usuario automáticamente a la URL de Keycloak que definiste en OIDC_ISSUER_URL.
+
+2. El Flujo de Autenticación (Paso a paso)
+En Keycloak: El usuario ve la pantalla de login de Keycloak. Introduce sus credenciales.
+
+El Ticket (Code): Si el login es correcto, Keycloak redirige al usuario de vuelta al proxy (/oauth2/callback) con un código temporal.
+
+El Intercambio: El proxy toma ese código y, por detrás (de servidor a servidor), le pregunta a Keycloak: "¿Es válido?". Keycloak le responde con un ID Token (que contiene el nombre del usuario).
+
+La Identidad: El proxy guarda esa información en una cookie cifrada en el navegador del usuario y, finalmente, deja pasar la petición hacia Django.
+
+3. ¿Para qué sirve cada configuración? (El "porqué")
+Aquí es donde conectamos el docker-compose con la realidad:
+
+En el oauth2-proxy:
+--set-xauthuser=true: Esta es la pieza más importante. Le dice al proxy: "Coge el nombre de usuario que te dio Keycloak y mételo en una cabecera HTTP llamada X-Forwarded-User antes de enviarle la petición a Django".
+
+--cookie-secret: Se usa para cifrar la cookie que se guarda en el navegador. Sin esto, cualquiera podría falsificar su identidad.
+
+--upstream: Es la dirección interna de Django. El proxy actúa como un túnel; lo que recibe por el 4180 lo manda al 8000.
+
+En Django (Middleware y Backend):
+RemoteUserMiddleware: Django normalmente busca al usuario en la sesión de su propia base de datos. Este middleware le dice: "Espera, antes de decir que no hay nadie, mira si el proxy nos envió un nombre en la cabecera HTTP".
+
+RemoteUserBackend: Cuando el middleware encuentra el nombre (ej. "juan.perez"), este backend le dice a Django: "Busca en nuestra tabla de MySQL auth_user si existe 'juan.perez'. Si existe, loguéalo con todos los permisos que ya tiene asignados".
+
+En las Bases de Datos (MySQL):
+mysql_native_password: Las versiones nuevas de MySQL usan un cifrado que a veces Keycloak no entiende de fábrica. Este comando asegura que hablen el mismo idioma desde el segundo uno.
+
+Volúmenes: Sin ellos, si el contenedor de MySQL se apaga, pierdes los usuarios creados en Keycloak y los permisos históricos de Django. Con ellos, los datos viven en tu disco duro, no en el contenedor.
+
+4. La "Magia" de los permisos existentes
+Como tú mencionaste que Django tiene usuarios y permisos de hace mucho tiempo, esta arquitectura es perfecta porque:
+
+Django sigue usando su propia base de datos MySQL para saber qué puede hacer cada usuario. Keycloak solo se encarga de decir quién es el usuario. Si el X-Forwarded-User coincide con un username que ya existe en tu base de datos de Django, el usuario entrará y verá todo exactamente como lo dejó.
+
+Resumen de la cadena de confianza:
+Keycloak confía en las credenciales del usuario.
+
+oauth2-proxy confía en el token de Keycloak.
+
+Django confía en la cabecera que le envía el proxy.
+
+Para que esto sea seguro, Django no debe estar expuesto a internet, solo el proxy. De lo contrario, alguien podría saltarse al portero y enviarle a Django una cabecera falsa con cualquier nombre de usuario.

@@ -1,0 +1,29 @@
+¿Cómo probar que todo funciona?
+Levanta el entorno: docker-compose up --build.
+
+Configura Keycloak:
+
+Ve a http://localhost:8080 (User: admin / Pass: la que pusiste en .env).
+
+Crea un Realm (ej: test-realm).
+
+Crea un Client (django-client):
+
+Client ID: django-client.
+
+Root URL: http://localhost:4180.
+
+Valid Redirect URIs: http://localhost:4180/oauth2/callback.
+
+Client Authentication: ON (para obtener el Secret).
+
+En la pestaña Credentials, copia el Secret y ponlo en tu archivo .env.
+
+Crea un User en Keycloak para probar.
+
+Reinicia el Proxy: docker-compose restart oauth2-proxy (para que tome el nuevo Secret del .env).
+
+Accede: Ve a http://localhost:4180.
+
+El flujo final será:
+Al entrar al puerto 4180, el proxy te mandará a Keycloak. Pones el usuario que creaste en Keycloak. Keycloak te devuelve al proxy, y el proxy le dice a Django: "Este es el usuario X". Django verá si existe en su tabla de MySQL (si no existe, el RemoteUserBackend lo creará automáticamente por defecto) y verás el mensaje de "¡Funciona!" con tu nombre de usuario.

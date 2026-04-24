@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  mysql_server:
+    image: mysql:8.0
+    container_name: mysql_v2_shared
+    command: --default-authentication-plugin=mysql_native_password
+    volumes:
+      - shared_mysql_data:/var/lib/mysql
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    networks:
+      - auth_network
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    container_name: keycloak_v2
+    command: start-dev
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_ADMIN_USER}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD}
+      KC_DB: mysql
+      KC_DB_URL: jdbc:mysql://mysql_server:3306/keycloak
+      KC_DB_USERNAME: ${KC_DB_USER}
+      KC_DB_PASSWORD: ${KC_DB_PASSWORD}
+    depends_on:
+      - mysql_server
+    networks:
+      - auth_network
+
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
+    container_name: oauth2_proxy_v2
+    ports:
+      - "4180:4180"
+    environment:
+      OIDC_ISSUER_URL: "http://keycloak:8080/realms/master"
+      OAUTH2_PROXY_CLIENT_ID: "django-client"
+      OAUTH2_PROXY_CLIENT_SECRET: ${KC_CLIENT_SECRET}
+      OAUTH2_PROXY_COOKIE_SECRET: ${COOKIE_SECRET}
+      OAUTH2_PROXY_UPSTREAM: "http://django:8000"
+      OAUTH2_PROXY_HTTP_ADDRESS: "0.0.0.0:4180"
+      OAUTH2_PROXY_REVERSE_PROXY: "true"
+      OAUTH2_PROXY_SET_XAUTHUSER: "true"
+      OAUTH2_PROXY_PASS_USER_HEADERS: "true"
+      OAUTH2_PROXY_EMAIL_DOMAINS: "*"
+    depends_on:
+      - keycloak
+      - django
+    networks:
+      - auth_network
+
+django:
+    build: .
+    container_name: django_app_v2
+    volumes:
+      - ./core:/code  # Mapea tu carpeta local 'core' al '/code' del contenedor
+    environment:
+      - DATABASE_URL=mysql://${DJANGO_DB_USER}:${DJANGO_DB_PASSWORD}@mysql_server:3306/django_db
+      - DJANGO_SETTINGS_MODULE=core.settings # OJO: Si la carpeta interna se llama core
+    depends_on:
+      - mysql_server
+    networks:
+      - auth_network
+
+volumes:
+  shared_mysql_data:
+
+networks:
+  auth_network:
+    driver: bridge

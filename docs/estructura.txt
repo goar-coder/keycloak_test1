@@ -1,0 +1,25 @@
+mi-proyecto-sso/           <-- Tu carpeta raíz (donde ejecutas docker-compose up)
+├── docker-compose.yml
+├── .env
+├── init-db.sql
+├── Dockerfile
+├── entrypoint.sh
+├── requirements.txt
+└── core/                  <-- Carpeta con el código de Django
+    ├── manage.py          <-- El archivo de control de Django
+    └── core/              <-- Carpeta de configuración de Django
+        ├── settings.py
+        ├── urls.py
+        └── views.py
+
+------------------------------------------------------------------------
+
+dentro del docker
+/code/                     <-- Aquí "vive" la app para Docker
+├── manage.py              <-- Antes estaba en core/manage.py, ahora está aquí
+├── core/                  <-- Esta es la carpeta de configuración interna
+│   ├── settings.py
+│   ├── urls.py
+│   └── views.py
+├── entrypoint.sh
+└── requirements.txt

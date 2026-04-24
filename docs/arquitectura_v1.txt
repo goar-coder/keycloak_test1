@@ -1,0 +1,69 @@
+================================================================================
+ESPECIFICACIÓN DE ARQUITECTURA: AUTENTICACIÓN DELEGADA (V1)
+================================================================================
+
+1. RESUMEN DE LA ESTRATEGIA
+--------------------------------------------------------------------------------
+Se utiliza un patrón de "Reverse Proxy Authentication". El componente 
+'oauth2-proxy' actúa como portero frente a Django, gestionando todo el flujo 
+OpenID Connect (OIDC) con Keycloak. Django confía ciegamente en el proxy y 
+autentica al usuario basado en las cabeceras HTTP recibidas.
+
+2. COMPONENTES DEL STACK
+--------------------------------------------------------------------------------
+- Identity Provider: Keycloak (Gestiona credenciales y SSO).
+- Auth Proxy: oauth2-proxy (Valida tokens y gestiona la sesión web).
+- Backend: Django (Aplicación legacy con usuarios y permisos existentes).
+
+3. FLUJO DE TRÁFICO Y DATOS
+--------------------------------------------------------------------------------
+[Usuario] -> [oauth2-proxy] -> [Keycloak (Login)]
+     ^             |
+     |             v
+     +------- [Django (Recibe cabecera X-Forwarded-User)]
+
+4. CONFIGURACIÓN TÉCNICA MÍNIMA (DJANGO)
+--------------------------------------------------------------------------------
+Modificaciones en 'settings.py' para integrar el sistema legacy:
+
+A. Middleware:
+Añadir 'django.contrib.auth.middleware.RemoteUserMiddleware' después de 
+'AuthenticationMiddleware'.
+
+B. Backends de Autenticación:
+AUTHENTICATION_BACKENDS = [
+    'django.contrib.auth.backends.RemoteUserBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
+
+C. Variables de entorno / Headers:
+oauth2-proxy enviará por defecto el usuario en la cabecera 'X-Forwarded-User'. 
+Django la leerá como 'HTTP_X_FORWARDED_USER'.
+
+5. CONFIGURACIÓN CLAVE OAUTH2-PROXY
+--------------------------------------------------------------------------------
+Parámetros críticos de ejecución:
+--provider=oidc
+--oidc-issuer-url=[URL_DE_KEYCLOAK_REALM]
+--client-id=[ID_CLIENTE]
+--client-secret=[SECRETO]
+--upstream=http://localhost:8000 (Dirección de Django)
+--set-xauthuser=true (Inyecta el usuario en los headers)
+--email-domain=*
+
+6. MATRIZ DE RESPONSABILIDADES
+--------------------------------------------------------------------------------
+- Gestión de Passwords:       Keycloak
+- Sesión de Navegador:        oauth2-proxy
+- Lógica de Permisos/Roles:   Django (Base de datos local)
+- Creación de Perfiles:       Django (Vía RemoteUserBackend)
+
+7. CONSIDERACIONES DE SEGURIDAD
+--------------------------------------------------------------------------------
+- El servidor de Django NO debe ser accesible desde internet directamente.
+- Solo debe aceptar peticiones provenientes de la IP del oauth2-proxy.
+- El uso de RemoteUserBackend asume que el proxy es 100% confiable.
+
+================================================================================
+FIN DE DOCUMENTO - ARQUITECTURA V1
+================================================================================
