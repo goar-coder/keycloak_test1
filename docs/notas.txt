@@ -1,0 +1,20 @@
+por precaucion en la terminal:
+dos2unix entrypoint.sh 2>/dev/null || sed -i 's/\r$//' entrypoint.sh
+sed -i 's/\r$//' entrypoint.sh
+chmod +x entrypoint.sh
+
+
+detener y arrancar limpio:
+docker-compose down
+docker-compose build --no-cache django
+docker-compose up -d
+
+chequendo:
+docker ps
+
+-----------------------------------------------
+python3 -m venv venv
+source venv/bin/activate
+pip install django
+
+django-admin startproject core .

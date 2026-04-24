@@ -12,20 +12,36 @@ services:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     networks:
       - auth_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "--password=${MYSQL_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   keycloak:
     image: quay.io/keycloak/keycloak:24.0
     container_name: keycloak_v2
     command: start-dev
+    ports:
+      - "8080:8080"
     environment:
+      # Nombres modernos para Keycloak 24+
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_ADMIN_USER}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD}
+      # Nombres antiguos (por si acaso, para compatibilidad)
+      KEYCLOAK_ADMIN: ${KC_ADMIN_USER}
+      KEYCLOAK_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD}
+      # Configuración de DB
       KC_DB: mysql
       KC_DB_URL: jdbc:mysql://mysql_server:3306/keycloak
       KC_DB_USERNAME: ${KC_DB_USER}
       KC_DB_PASSWORD: ${KC_DB_PASSWORD}
+      # Saltarse la restricción de "Local access required"
+      KC_HOSTNAME_STRICT: "false"
+      KC_HTTP_ENABLED: "true"
     depends_on:
-      - mysql_server
+      mysql_server:
+        condition: service_healthy
     networks:
       - auth_network
 
@@ -51,16 +67,24 @@ services:
     networks:
       - auth_network
 
-django:
+  django:
     build: .
     container_name: django_app_v2
+    ports:
+    - "8000:8000"
     volumes:
-      - ./core:/code  # Mapea tu carpeta local 'core' al '/code' del contenedor
+      - .:/code  # <--- CAMBIO CLAVE: Punto en lugar de ./core
+    command: >
+      sh -c "echo 'Esperando MySQL...' && 
+             while ! nc -z mysql_server 3306; do sleep 1; done && 
+             python manage.py migrate --noinput && 
+             python manage.py runserver 0.0.0.0:8000"
     environment:
       - DATABASE_URL=mysql://${DJANGO_DB_USER}:${DJANGO_DB_PASSWORD}@mysql_server:3306/django_db
-      - DJANGO_SETTINGS_MODULE=core.settings # OJO: Si la carpeta interna se llama core
+      - DJANGO_SETTINGS_MODULE=core.settings
     depends_on:
-      - mysql_server
+      mysql_server:
+        condition: service_healthy
     networks:
       - auth_network
 
