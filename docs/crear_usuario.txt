@@ -1,0 +1,19 @@
+1. Crear el nuevo usuario nuevo
+Ir a Users -> Add user.
+
+Username: django_user
+Click a Create.
+
+ir a la pestaña Credentials -> Set password.
+Password: test1234
+Temporary: OFF (Asegúrate de que esté apagado).
+
+Click a Save.
+
+2. Verificar el Email (muy importante)
+Como el Proxy está configurado para buscar el email como identificación principal, si el usuario no tiene email, el Proxy dará error.
+En la pestaña Details del nuevo usuario (django_user), rellenar el campo Email: test@example.com.
+
+Email verified: ON (Cámbialo a azul).
+
+Click a Save.
