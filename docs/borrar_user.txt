@@ -1,0 +1,4 @@
+docker compose up -d --no-deps oauth2-proxy
+
+docker exec django_app_v2 python manage.py shell -c \
+  "from django.contrib.auth.models import User; User.objects.all().delete()"

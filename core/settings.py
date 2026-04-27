@@ -14,6 +14,12 @@ DEBUG = True
 # Permitir todos los hosts en desarrollo para que el proxy pueda conectar
 ALLOWED_HOSTS = ['*']
 
+# Permite que Django confíe en los nombres que le envía el Proxy
+USE_X_FORWARDED_HOST = True
+USE_X_FORWARDED_PORT = True
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+
 # Definición de aplicaciones
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -34,7 +40,8 @@ MIDDLEWARE = [
     
     # --- CONFIGURACIÓN SSO V2 ---
     # Este middleware detecta al usuario que el oauth2-proxy inyecta en la cabecera
-    'django.contrib.auth.middleware.RemoteUserMiddleware',
+    'core.middleware.XForwardedUserMiddleware',
+    # 'django.contrib.auth.middleware.RemoteUserMiddleware',
     
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -43,14 +50,15 @@ MIDDLEWARE = [
 # Configuración de los Backends de Autenticación
 AUTHENTICATION_BACKENDS = [
     # 1. Permite autenticar basándose en la cabecera del proxy
-    'django.contrib.auth.backends.RemoteUserBackend',
+    # 'django.contrib.auth.backends.RemoteUserBackend',
+    'core.backends.KeycloakRemoteUserBackend',  # ← reemplaza RemoteUserBackend
     # 2. Mantiene el login tradicional (útil para el admin de Django)
     'django.contrib.auth.backends.ModelBackend',
 ]
 
 # Cabecera que enviará el oauth2-proxy (X-Forwarded-User)
 # Django antepone 'HTTP_' y convierte guiones en guiones bajos
-AUTHENTICATION_HEADER = 'HTTP_X_FORWARDED_USER'
+# AUTHENTICATION_HEADER = 'HTTP_X_FORWARDED_USER'
 
 ROOT_URLCONF = 'core.urls'
 

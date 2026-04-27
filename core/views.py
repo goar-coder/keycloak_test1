@@ -1,6 +1,11 @@
 from django.http import HttpResponse
 
 def test_view(request):
+    # Debug temporal — borrar después
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.warning(f"HEADERS: { {k:v for k,v in request.META.items() if 'USER' in k or 'FORWARD' in k} }")
+    
     if request.user.is_authenticated:
         user_info = f"""
             <h1>¡Funciona!</h1>

@@ -1,0 +1,51 @@
+1. Crear el Realm (El "reino" de tu app)
+No uses el realm master para tus aplicaciones; es mejor crear uno nuevo.
+
+Haz clic en el desplegable que dice Master (arriba a la izquierda) y pulsa Create Realm.
+
+Nombre: django-realm.
+
+Dale a Create.
+
+2. Crear el Cliente (La conexión para Django)
+En el menú lateral, ve a Clients y pulsa Create client.
+
+Client ID: django-client (Debe ser igual al que tienes en el .env).
+
+Dale a Next.
+
+Client Authentication: Actívalo (ON). Esto es vital para que Keycloak genere una contraseña para este cliente.
+
+Authentication flow: Asegúrate de que Standard flow esté marcado.
+
+Dale a Save.
+
+3. Configurar las URLs de redirección
+Ahora Keycloak necesita saber a dónde enviar al usuario tras el login exitoso:
+
+Dentro del cliente que acabas de crear, busca la sección Access settings.
+
+Root URL: http://localhost:4180
+
+Valid redirect URIs: http://localhost:4180/oauth2/callback
+
+Web origins: http://localhost:4180
+
+Dale a Save al final de la página.
+
+4. Obtener el Secreto (El dato que necesito)
+Este es el paso donde "unimos" Keycloak con tu código:
+
+Ve a la pestaña Credentials (dentro del cliente django-client).
+
+Verás un campo llamado Client Secret.
+
+Cópialo.
+
+¿Qué sigue?
+Ahora ve a tu archivo .env y actualiza estas dos líneas:
+
+KC_CLIENT_SECRET= (Pega aquí el código que acabas de copiar).
+
+Asegúrate de que OIDC_ISSUER_URL en tu docker-compose.yml apunte al realm correcto:
+http://keycloak:8080/realms/django-realm

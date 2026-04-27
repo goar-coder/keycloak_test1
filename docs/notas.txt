@@ -18,3 +18,8 @@ source venv/bin/activate
 pip install django
 
 django-admin startproject core .
+
+------------------------------------------------
+Client Secret: I98FnBPSQeXSW2BWFW8AUKiUqoPUdmT6
+
+usuario creado en el realm: gorue

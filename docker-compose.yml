@@ -48,19 +48,54 @@ services:
   oauth2-proxy:
     image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
     container_name: oauth2_proxy_v2
+    restart: always
     ports:
       - "4180:4180"
     environment:
-      OIDC_ISSUER_URL: "http://keycloak:8080/realms/master"
-      OAUTH2_PROXY_CLIENT_ID: "django-client"
-      OAUTH2_PROXY_CLIENT_SECRET: ${KC_CLIENT_SECRET}
-      OAUTH2_PROXY_COOKIE_SECRET: ${COOKIE_SECRET}
-      OAUTH2_PROXY_UPSTREAM: "http://django:8000"
-      OAUTH2_PROXY_HTTP_ADDRESS: "0.0.0.0:4180"
-      OAUTH2_PROXY_REVERSE_PROXY: "true"
-      OAUTH2_PROXY_SET_XAUTHUSER: "true"
-      OAUTH2_PROXY_PASS_USER_HEADERS: "true"
-      OAUTH2_PROXY_EMAIL_DOMAINS: "*"
+      - OAUTH2_PROXY_PROVIDER=oidc
+      - OAUTH2_PROXY_CLIENT_ID=${KC_CLIENT_ID}
+      - OAUTH2_PROXY_CLIENT_SECRET=${KC_CLIENT_SECRET}
+      - OAUTH2_PROXY_COOKIE_SECRET=${COOKIE_SECRET}
+      - OAUTH2_PROXY_COOKIE_SECURE=false
+      - OAUTH2_PROXY_HTTP_ADDRESS=0.0.0.0:4180
+      # - OAUTH2_PROXY_UPSTREAM=http://django:8000/
+      - OAUTH2_PROXY_UPSTREAMS=http://django:8000/
+      # - OAUTH2_PROXY_PROXY_PREFIX=/
+      
+
+      - OAUTH2_PROXY_REDIRECT_URL=http://localhost:4180/oauth2/callback
+
+      # URLs de Comunicación (Mantenemos el truco de Localhost vs Keycloak)
+      - OAUTH2_PROXY_OIDC_ISSUER_URL=http://keycloak:8080/realms/django-realm  # El Proxy usa esta URL para descargar la configuración (Docker a Docker)
+      - OAUTH2_PROXY_LOGIN_URL=http://localhost:8080/realms/django-realm/protocol/openid-connect/auth # Esta es la URL que el Proxy le dirá a TU NAVEGADOR que abra
+      - OAUTH2_PROXY_REDEEM_URL=http://keycloak:8080/realms/django-realm/protocol/openid-connect/token # URL interna para validar los tokens (Docker a Docker)
+      - OAUTH2_PROXY_OIDC_JWKS_URL=http://keycloak:8080/realms/django-realm/protocol/openid-connect/certs
+
+      # Configuración de Identidad
+      - OAUTH2_PROXY_USER_ID_CLAIM=email
+      # - OAUTH2_PROXY_USER_ID_CLAIM=preferred_username # Esto hará que X-Forwarded-User envíe django_user en lugar del UUID.
+
+      
+      - OAUTH2_PROXY_SCOPE=openid email profile
+      - OAUTH2_PROXY_PASS_GROUPS=false # revisar esto
+      - OAUTH2_PROXY_EMAIL_DOMAINS=*
+      - OAUTH2_PROXY_INSECURE_OIDC_ALLOW_UNVERIFIED_EMAIL=true
+      
+      # Saltos de validación para desarrollo
+      - OAUTH2_PROXY_SKIP_OIDC_DISCOVERY=true  # configuracion manual
+      # SALTAR LA DISCOVERY PARA USAR LAS URLS DIRECTAS
+      # El LOGIN_URL, REDEEM_URL, JWKS_URL se fija directamente, sin depender de la discovery
+      # El proxy NO descubre automáticamente endpoints de Keycloak
+      - OAUTH2_PROXY_SKIP_OIDC_USER_INFO=true
+      - OAUTH2_PROXY_INSECURE_OIDC_SKIP_ISSUER_VERIFICATION=true
+      - OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY=true
+      
+      # Cabeceras para Django
+      - OAUTH2_PROXY_REVERSE_PROXY=true
+      - OAUTH2_PROXY_SET_XAUTHUSER=true
+      - OAUTH2_PROXY_PASS_USER_HEADERS=true
+      - OAUTH2_PROXY_PASS_HOST_HEADER=true
+
     depends_on:
       - keycloak
       - django
@@ -70,6 +105,7 @@ services:
   django:
     build: .
     container_name: django_app_v2
+    hostname: django # <--- Añade esto para asegurar el DNS interno
     ports:
     - "8000:8000"
     volumes:
