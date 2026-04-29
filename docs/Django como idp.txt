@@ -1,0 +1,246 @@
+ARQUITECTURA
+
+Django OAuth Toolkit es una biblioteca de software de código abierto para el framework web Django. Proporciona una 
+implementación completa del protocolo OAuth2, permitiendo a las aplicaciones basadas en Django actuar como proveedores 
+de autorización y emitir tokens de acceso para clientes externos. Es ampliamente utilizada para asegurar APIs y gestionar 
+autenticaciones entre servicios.
+
+https://django-oauth-toolkit.readthedocs.io/en/latest/
+
+Te permite implementar OAuth2 server.
+
+Instalación:
+
+pip install django-oauth-toolkit
+
+Configuración básica:
+
+INSTALLED_APPS = [
+    "oauth2_provider",
+]
+
+
+
+D1 actúa como Identity Provider (IdP):
+
+Gestiona usuarios
+Gestiona roles
+Emite tokens OAuth2
+
+D2 y D3 actúan como Service Providers (SP):
+
+Redirigen a D1 para login
+Validan tokens
+Autorizan según roles
+
+DOCKER COMPOSE
+
+version: "3.9"
+
+services:
+
+d1:
+build: ./d1
+container_name: d1-idp
+ports:
+- "8001:8000"
+environment:
+- DB_NAME=d1db
+- DB_USER=d1user
+- DB_PASSWORD=d1pass
+- DB_HOST=d1-db
+depends_on:
+- d1-db
+
+d1-db:
+image: postgres:15
+environment:
+POSTGRES_DB: d1db
+POSTGRES_USER: d1user
+POSTGRES_PASSWORD: d1pass
+volumes:
+- d1_data:/var/lib/postgresql/data
+
+d2:
+build: ./d2
+container_name: d2-app
+ports:
+- "8002:8000"
+environment:
+- OAUTH_SERVER=http://d1:8000
+
+depends_on:
+- d1
+
+d3:
+build: ./d3
+container_name: d3-app
+ports:
+- "8003:8000"
+environment:
+- OAUTH_SERVER=http://d1:8000
+
+depends_on:
+- d1
+
+volumes:
+d1_data:
+
+D1 (IDENTITY PROVIDER)
+
+requirements.txt:
+Django>=5.0
+psycopg2-binary
+django-oauth-toolkit
+djangorestframework
+
+settings.py (apps instaladas):
+django.contrib.admin
+django.contrib.auth
+django.contrib.contenttypes
+django.contrib.sessions
+django.contrib.messages
+django.contrib.staticfiles
+oauth2_provider
+rest_framework
+accounts
+
+MODELO DE ROLES
+
+accounts/models.py:
+
+from django.contrib.auth.models import User
+from django.db import models
+
+class Role(models.Model):
+name = models.CharField(max_length=50)
+
+class UserRole(models.Model):
+user = models.ForeignKey(User, on_delete=models.CASCADE)
+role = models.ForeignKey(Role, on_delete=models.CASCADE)
+
+AÑADIR ROLES AL TOKEN
+
+accounts/oauth.py:
+
+from oauth2_provider.models import AccessToken
+from .models import UserRole
+
+def get_roles(user):
+return list(
+UserRole.objects.filter(user=user)
+.values_list("role__name", flat=True)
+)
+
+SIGNAL PARA INCLUIR ROLES EN EL TOKEN
+
+from oauth2_provider.signals import token_generated
+from django.dispatch import receiver
+
+@receiver(token_generated)
+def add_roles_to_token(sender, request, token, **kwargs):
+user = token.user
+roles = list(user.userrole_set.values_list("role__name", flat=True))
+token.extra_data = {"roles": roles}
+token.save()
+
+URLS D1
+
+from django.urls import path, include
+
+urlpatterns = [
+path("o/", include("oauth2_provider.urls", namespace="oauth2_provider")),
+]
+
+D2 / D3 (SERVICE PROVIDERS)
+
+requirements.txt:
+Django>=5.0
+requests
+PyJWT
+
+settings.py:
+
+OAUTH_SERVER = "http://d1:8000
+"
+CLIENT_ID = "d2-client"
+CLIENT_SECRET = "secret"
+
+MIDDLEWARE SSO
+
+auth/middleware.py:
+
+import requests
+
+class SSOAuthMiddleware:
+def init(self, get_response):
+self.get_response = get_response
+
+def __call__(self, request):
+
+    token = request.COOKIES.get("access_token")
+
+    if token:
+        resp = requests.get(
+            "http://d1:8000/o/introspect/",
+            data={"token": token},
+            auth=("d2-client", "secret"),
+        )
+
+        if resp.status_code == 200:
+            data = resp.json()
+            request.user_roles = data.get("roles", [])
+            request.is_authenticated_sso = True
+        else:
+            request.is_authenticated_sso = False
+    else:
+        request.is_authenticated_sso = False
+
+    return self.get_response(request)
+
+LOGIN REDIRECT
+
+def login(request):
+return redirect(
+"http://d1:8000/o/authorize/?response_type=code&client_id=d2-client
+"
+)
+
+CONTROL DE ACCESO POR ROLES
+
+def dashboard(request):
+if "admin" not in getattr(request, "user_roles", []):
+return HttpResponse("Forbidden", status=403)
+
+return HttpResponse("D2 Dashboard")
+
+LEVANTAR EL SISTEMA
+
+docker compose up --build
+
+CREAR USUARIOS Y ROLES
+
+Acceder a:
+http://localhost:8001/admin
+
+Crear:
+
+usuarios
+roles (admin, d2_user, d3_user)
+asignar roles a usuarios
+
+FLUJO
+
+Usuario entra en D2 o D3
+Se redirige a D1
+Hace login en D1
+D1 emite token OAuth2 con roles
+D2/D3 validan token
+Acceso permitido según roles
+
+NOTAS
+
+D1 es la única fuente de verdad
+D2 y D3 no gestionan usuarios
+Los roles viajan dentro del token
+El acceso se controla localmente en cada app

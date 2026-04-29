@@ -1,0 +1,161 @@
+Modelo híbrido:
+
+- Keycloak como motor de autenticación (IdP)
+- D1 como fuente de verdad de identidades y autorización
+
+Eso es un patrón bastante usado (aunque más avanzado): external IdP + internal IAM.
+
+Arquitectura híbrida (la buena para tu caso)
+Usuario
+   │
+   ▼
+Keycloak (login, sesión, tokens)
+   │
+   ▼
+D2 / D3 (apps)
+   │
+   ▼
+D1 (source of truth: users, roles, permissions)
+
+Flujo REAL con este modelo
+Usuario entra a D2
+D2 redirige a Keycloak
+Usuario hace login en Keycloak
+Keycloak devuelve ID Token (OIDC)
+D2 recibe el token
+D2 llama a D1 para saber:
+    * qué roles tiene ese usuario
+    * si puede entrar a D2
+
+nota: Keycloak NO decide permisos, solo autentica
+
+No se debe de intentar poner toda la lógica de roles en Keycloak ahora mismo, porque:
+    * romperías tu “source of truth”
+    * duplicarías lógica
+    * crearías inconsistencias
+
+En esta version intermedia:
+Keycloak = quién eres
+D1 = qué puedes hacer
+
+Componentes
+Keycloak:
+    Login
+    Sesión SSO
+    Emisión de tokens (OIDC)
+
+D1:
+    Usuarios (modelo Django)
+    Roles
+    Permisos
+    API de autorización
+
+D2 / D3:
+    Clientes OIDC
+    Llaman a D1 para autorización
+
+docker-compose para esta version
+version: "3.9"
+
+services:
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    command: start-dev
+    ports:
+      - "8080:8080"
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+
+  d1:
+    build: ./d1
+    ports:
+      - "8001:8000"
+
+  d2:
+    build: ./d2
+    ports:
+      - "8002:8000"
+    environment:
+      - KEYCLOAK_URL=http://keycloak:8080
+      - D1_API=http://d1:8000
+
+  d3:
+    build: ./d3
+    ports:
+      - "8003:8000"
+    environment:
+      - KEYCLOAK_URL=http://keycloak:8080
+      - D1_API=http://d1:8000
+
+
+****************************************************************
+El problema ahora es como se conectan Keycloak con D1
+
+version 1 duplicar usuarios
+    usuarios en Keycloak
+    usuarios en D1
+
+Aqui se puede pensar en solo subir los usuarios y la hacer el login en D1
+se puede traer todos los usuarios a Keycloak y con signals mantenerlo sincronizados
+
+----------------------------
+version 2 usar D1 como backend de autenticación
+
+Keycloak permite hacer una User Federation / Custom User Storage SPI
+Pero eso hay que programarlo en Java no se que tan difcil saber
+
+----------------------------
+version 3 sincronización ligera + lookup en runtime
+Keycloak → autenticación
+D1 → autorización
+D2/D3 → enforcement
+
+Hay que definir dentificador único o el username o el email
+Ejemplo:
+Keycloak → preferred_username
+D1 → username
+
+
+Flujo de autorización real
+En D2 / D3:
+Recibes token OIDC de Keycloak
+Extraes usuario:
+username = claims["preferred_username"]
+
+Llamas a D1:
+GET /api/authz/user-info?username=juan
+D1 responde:
+{
+  "roles": ["d2_user"],
+  "permissions": ["view_dashboard"]
+}
+
+Ejemplo del endpoint en D1
+# D1 API
+
+from django.http import JsonResponse
+from django.contrib.auth.models import User
+
+def user_info(request):
+    username = request.GET.get("username")
+
+    user = User.objects.get(username=username)
+
+    roles = list(user.userrole_set.values_list("role__name", flat=True))
+
+    return JsonResponse({
+        "roles": roles
+    })
+
+Ejemplo de autorización final en D2 o D3
+def dashboard(request):
+
+    roles = request.d1_roles
+
+    if "d2_user" not in roles:
+        return HttpResponse("Forbidden", status=403)
+
+    return HttpResponse("OK")
+

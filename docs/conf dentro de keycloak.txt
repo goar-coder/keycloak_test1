@@ -31,6 +31,8 @@ Valid redirect URIs: http://localhost:4180/oauth2/callback
 
 Web origins: http://localhost:4180
 
+Home URL: Es simplemente a dónde redirige Keycloak si alguien entra “al cliente” sin contexto. no poner nada
+
 Dale a Save al final de la página.
 
 4. Obtener el Secreto (El dato que necesito)

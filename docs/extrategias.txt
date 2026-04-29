@@ -1,0 +1,115 @@
+1 Keycloak como broker + federación de usuarios desde D1 (DB existente)
+
+Idea: Mantienes la base de datos de usuarios en D1. Keycloak se conecta a esa BD (o a un adaptador) y delega la autenticación.
+
+Cómo funciona
+
+Configuras en Keycloak un User Federation Provider (LDAP es nativo; para SQL necesitarías un SPI/custom provider).
+Keycloak valida credenciales contra la BD de D1.
+D2 y D3 confían en Keycloak vía OIDC.
+
+Pros
+
+Cambios mínimos en D1 (puedes dejar su modelo casi intacto).
+Un único login central sin migrar usuarios.
+D2/D3 no necesitan conocer la BD de D1.
+
+Contras
+
+Implementación más compleja (SPI para DB si no es LDAP).
+Acoplamiento a la estructura de la BD de D1.
+Algunas features de Keycloak (políticas, atributos) quedan limitadas o requieren mapping extra.
+Rendimiento/latencia si cada login consulta D1.
+
+----------------------------------------------------------------------------------------
+
+2 Keycloak como fuente de verdad + migración/replicación de usuarios
+
+Idea: Migras los usuarios de D1 a Keycloak y, opcionalmente, sincronizas atributos hacia D1 si aún los necesitas allí.
+
+Cómo funciona
+
+Importas usuarios (hashes de contraseña si son compatibles, o password reset).
+D1 pasa a confiar en Keycloak para autenticar (OIDC) y deja de validar passwords.
+D2 y D3 usan Keycloak directamente.
+
+Pros
+
+Arquitectura limpia y estándar (OIDC/OAuth2).
+Aprovechas todo Keycloak (MFA, políticas, SSO, revocación, etc.).
+Menos acoplamiento con D1 a largo plazo.
+
+Contras
+
+Esfuerzo inicial de migración (y posible cambio de contraseñas).
+D1 debe adaptarse a autenticación externa (no enorme, pero no “cero cambios”).
+
+----------------------------------------------------------------------------------------
+
+3 Proxy de autenticación delante de D1 (y resto) + Keycloak
+
+Idea: Introduces un auth proxy (p. ej., Nginx + oauth2-proxy) que habla con Keycloak y protege tus apps.
+
+Cómo funciona
+
+El proxy gestiona login OIDC con Keycloak.
+Inyecta cabeceras (usuario, roles) a D1/D2/D3.
+Las apps confían en esas cabeceras.
+
+Pros
+
+Cambios muy pequeños en D1/D2/D3 (leer cabeceras).
+Desacoplas autenticación del código Django.
+
+Contras
+
+Seguridad depende de configurar bien el proxy (cabeceras confiables).
+Menos “idiomático” que integrar OIDC directamente en Django.
+Gestión de permisos/roles puede volverse difusa.
+
+----------------------------------------------------------------------------------------
+
+4 Integración OIDC nativa en Django (cada app) con Keycloak
+
+Idea: Cada app Django (D1, D2, D3) usa OIDC (p. ej., via django-allauth o mozilla-django-oidc) contra Keycloak.
+
+Cómo funciona
+
+Redirección a Keycloak para login.
+Las apps crean/actualizan usuarios locales (just-in-time provisioning) a partir del token.
+
+Pros
+
+Estándar, mantenible.
+Control fino en cada app sobre permisos locales.
+No necesitas tocar la BD de D1 para autenticar.
+
+Contras
+
+Cambios en las 3 apps (aunque acotados).
+Debes mapear roles/claims de Keycloak a permisos Django.
+Duplicidad de usuarios “sombra” en cada app (si no centralizas perfiles).
+
+----------------------------------------------------------------------------------------
+
+5 Híbrido: D1 como “servicio de perfiles” + Keycloak IdP
+
+Idea: Keycloak autentica; D1 mantiene datos de negocio del usuario (perfil, permisos finos).
+Las apps consultan D1 para autorización.
+
+Cómo funciona
+
+Login vía Keycloak (OIDC).
+Token contiene sub (user id).
+D2/D3 llaman a D1 (API) para permisos/roles.
+
+Pros
+
+Mantienes lógica de permisos existente en D1.
+Centralizas autorización compleja en un solo sitio.
+
+Contras
+
+Latencia adicional (llamadas a D1).
+Debes diseñar caché/consistencia.
+Más moving parts.

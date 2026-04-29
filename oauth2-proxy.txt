@@ -1,0 +1,50 @@
+OAUTH2_PROXY_PROVIDER=oidc
+Indica que el proxy usará OpenID Connect como protocolo de autenticación. Es el estándar que utiliza Keycloak.
+
+OAUTH2_PROXY_CLIENT_ID
+Es el identificador del cliente que se creo en Keycloak. Debe coincidir exactamente con el configurado allí.
+
+OAUTH2_PROXY_CLIENT_SECRET
+Es el secreto asociado al cliente en Keycloak (el que se creo cuando se creo el client). Se usa para autenticar al proxy frente a Keycloak.
+
+OAUTH2_PROXY_COOKIE_SECRET
+Clave usada para firmar y cifrar las cookies de sesión. Debe ser larga, aleatoria y preferiblemente en base64. Si cambia, invalida las sesiones existentes.
+
+OAUTH2_PROXY_COOKIE_SECURE=false
+Indica si las cookies solo deben enviarse por HTTPS.
+false permite HTTP (útil en local). 
+true debe usarse en producción.
+OJO: Esto es para mis pruebas locales en prod hay que cambiarlo
+
+OAUTH2_PROXY_HTTP_ADDRESS=0.0.0.0:4180
+Define la dirección y puerto donde escucha el proxy dentro del contenedor.
+0.0.0.0 permite acceso desde fuera del contenedor.
+
+OAUTH2_PROXY_UPSTREAMS=http://django:8000/
+
+Define el backend real al que el proxy reenviará las peticiones una vez autenticado el usuario. En este caso, tu aplicación Django.
+
+OAUTH2_PROXY_REDIRECT_URL=http://localhost:4180/oauth2/callback
+
+URL a la que Keycloak redirige al usuario después del login.
+Debe coincidir exactamente con "Valid redirect URIs" en Keycloak.
+
+OAUTH2_PROXY_OIDC_ISSUER_URL=http://keycloak:8080/realms/django-realm
+
+URL interna que el proxy usa para descubrir la configuración OIDC (endpoints automáticos). Usa el nombre del contenedor porque es comunicación dentro de Docker.
+
+OAUTH2_PROXY_LOGIN_URL=http://localhost:8080/realms/django-realm/protocol/openid-connect/auth
+
+URL a la que el navegador del usuario es redirigido para iniciar sesión. Debe ser accesible desde el navegador (por eso se usa localhost).
+
+OAUTH2_PROXY_REDEEM_URL=http://keycloak:8080/realms/django-realm/protocol/openid-connect/token
+
+Endpoint interno que el proxy usa para intercambiar el código de autorización por tokens. Es comunicación entre contenedores.
+
+OAUTH2_PROXY_OIDC_JWKS_URL=http://keycloak:8080/realms/django-realm/protocol/openid-connect/certs
+
+URL interna para obtener las claves públicas (JWKS) y validar la firma de los tokens JWT.
+
+Resumen importante:
+Las URLs con "keycloak" se usan para comunicación interna entre contenedores.
+Las URLs con "localhost" se usan para redirecciones en el navegador del usuario.
