@@ -1,0 +1,5 @@
+https://www.oauth.com/playground/
+
+https://auth0.com/intro-to-iam/what-is-oauth-2
+
+https://stackademic.com/blog/integrating-keycloak-with-django-7ae39abe3a0b
